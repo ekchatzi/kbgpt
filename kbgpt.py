@@ -47,7 +47,7 @@ def LOGD(*args, **kwargs):
         return
     print(*args, **kwargs)
 
-
+SCRAPE_DEPTH = 3
 
 PATH = os.path.dirname(os.path.realpath(__file__))
 
@@ -210,7 +210,7 @@ def convert_file_to_text(full_path):
             for page in doc:
                 text = page.get_text()
                 pages.append(text)
-            text = '\n\n'.join(pages)
+            text = '\n\n-------\n\n'.join(pages)
             return text
         else:
             with open(full_path, 'r') as fp:
@@ -227,7 +227,8 @@ def convert_file_to_text(full_path):
 def split_text_by_line_start(text, delimiter):
     ret = []
     current_lines = []
-    for line in text:
+    for line in text.split('\n'):
+        print(line)
         if line.startswith(delimiter):
             ret.append('\n'.join(current_lines))
             current_lines = []
@@ -241,6 +242,8 @@ def convert_text_to_documents(text, full_path='.txt'):
     texts = []
     if full_path.endswith('.py'):
         texts = split_text_by_line_start(text, 'def ')
+    elif full_path.endswith('.pdf'):
+        texts = split_text_by_line_start(text, '-------')
     elif full_path.endswith('.js'):
         texts = split_text_by_line_start(text, 'function ')
     else:
@@ -390,7 +393,7 @@ def find_documents(docs_dir, user, pquery, token_limit, filter=None):
 
 
 def prepare_messages_with_documents(docs, previous_conversation, max_length=TRUNCATE_LENGTH, role="helpful assistant"):
-    context = '\n--\n\n\n\n'.join(docs)
+    context = '\n-------\n\n\n\n'.join(docs)
     LOGD(context)
     messages = [
         {"role": "system", "content": "You are a "+role+". Some context:"+context},
@@ -429,8 +432,9 @@ def use_nocontext_forced_context():
     global FORCED_CONTEXT
     FORCED_CONTEXT = ['<NOCONTEXT>']
 
-def load_files_to_forced_context(docs_dir, user, files):
-    clear_forced_context()
+def add_files(docs_dir, user, files, force_context=False):
+    if force_context:
+        clear_forced_context()
 
     source_dir = get_user_source_dir(docs_dir, user)
     
@@ -449,7 +453,8 @@ def load_files_to_forced_context(docs_dir, user, files):
             print(f'Using file {file} ({source_filename})')
             os.makedirs(os.path.dirname(source_filename), exist_ok=True)
             shutil.copyfile(file, source_filename)
-        FORCED_CONTEXT.append(source_filename)
+        if force_context or (len(FORCED_CONTEXT) > 0 and '<NOCONTEXT>' not in FORCED_CONTEXT):
+            FORCED_CONTEXT.append(source_filename)
     init_for_user(docs_dir, user)
         
 
@@ -554,7 +559,7 @@ def save_html_page(url, content, directory):
         f.write(content)
     return file_path
 
-def download_html_pages(url, directory, max_depth=3, visited=set(), depth=0):
+def download_html_pages(url, directory, max_depth=SCRAPE_DEPTH, visited=set(), depth=0):
     if depth > max_depth:
         return
     
@@ -619,7 +624,9 @@ def repl_loop(docs_dir, user, role):
             elif code.startswith('get '):
                 get_website(docs_dir, user, code.split('get ')[1])
             elif code.startswith('use '):
-                load_files_to_forced_context(docs_dir, user, repl_get_args(code.split('use ')[1]))
+                add_files(docs_dir, user, repl_get_args(code.split('use ')[1]), force_context=True)
+            elif code.startswith('add '):
+                add_files(docs_dir, user, repl_get_args(code.split('add ')[1]), force_context=False)
             elif code.startswith('nocontext'):
                 use_nocontext_forced_context()
             else:
@@ -646,10 +653,12 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Search with GPT')
     parser.add_argument('--docs-dir','-d', default=os.path.join(PATH, 'docs'))
     parser.add_argument('--user','-u', type=str, default='0')
+    parser.add_argument('--scrape-depth', type=int, default=3)
     parser.add_argument('--role','-r', type=str, default='helpful assistant')
     parser.add_argument('--verbose','-v', action='store_true', default=False)
     args = parser.parse_args()
     
     DEBUG_LOGS = args.verbose
+    SCRAPE_DEPTH = args.scrape_depth
     init_for_user(args.docs_dir, args.user)
     repl_loop(args.docs_dir, args.user, args.role)
