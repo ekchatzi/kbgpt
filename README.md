@@ -1,4 +1,4 @@
-# kbgpt
+# kbgpt - Knowledge Base GPT
 
 *kbgpt* is an command line interface to Large Language Models (LLM) that has the ability to use your own files and scrape websites. All you need is a python environment and an OpenAI API key.
 
